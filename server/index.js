@@ -1,298 +1,298 @@
+// =========================
+// 🌍 Carbon API Backend
+// =========================
+
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
-require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Middlewares
 app.use(cors());
 app.use(express.json());
 
-// Climatiq API configuration
-const CLIMATIQ_API_KEY = process.env.CLIMATIQ_API_KEY || '';
-const CLIMATIQ_BASE_URL = 'https://beta3.api.climatiq.io';
+// =========================
+// 🌐 API CONFIG
+// =========================
 
-// Gold Standard API configuration
-const GOLD_STANDARD_BASE_URL = 'https://api.goldstandard.org';
+// Climatiq (Updated stable endpoint)
+const CLIMATIQ_API_KEY = process.env.CLIMATIQ_API_KEY || "";
+const CLIMATIQ_BASE_URL = "https://api.climatiq.io";
 
-// Helper function to search for emission factors
+// Gold Standard (fallback used)
+const GOLD_STANDARD_BASE_URL = "https://api.goldstandard.org";
+
+// =========================
+// 🔍 Helper: Search Emission Factor
+// =========================
 async function searchEmissionFactor(query) {
   try {
-    const response = await axios.get(
-      `${CLIMATIQ_BASE_URL}/search`,
-      {
-        params: {
-          query: query,
-          category: 'transport',
-          results_per_page: 1
-        },
-        headers: {
-          'Authorization': `Bearer ${CLIMATIQ_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-    
-    if (response.data && response.data.results && response.data.results.length > 0) {
+    const response = await axios.get(`${CLIMATIQ_BASE_URL}/search`, {
+      params: {
+        query,
+        category: "transport",
+        results_per_page: 1,
+      },
+      headers: {
+        Authorization: `Bearer ${CLIMATIQ_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (response.data?.results?.length > 0) {
       return response.data.results[0].id;
     }
     return null;
   } catch (error) {
-    console.error('Climatiq Search Error:', error.response?.data || error.message);
+    console.error("Climatiq Search Error:", error.response?.data || error.message);
     return null;
   }
 }
 
-// Helper function to calculate emissions using Climatiq API
+// =========================
+// 🔥 Helper: Calculate Emissions
+// =========================
 async function calculateEmissions(activityData) {
   try {
     const { activity_id, parameters } = activityData;
-    
+
     const response = await axios.post(
       `${CLIMATIQ_BASE_URL}/estimate`,
       {
-        emission_factor: {
-          id: activity_id
-        },
-        parameters: parameters
+        emission_factor: { id: activity_id },
+        parameters,
       },
       {
         headers: {
-          'Authorization': `Bearer ${CLIMATIQ_API_KEY}`,
-          'Content-Type': 'application/json'
-        }
+          Authorization: `Bearer ${CLIMATIQ_API_KEY}`,
+          "Content-Type": "application/json",
+        },
       }
     );
-    
+
     return response.data;
   } catch (error) {
-    console.error('Climatiq API Error:', error.response?.data || error.message);
-    // Return fallback calculation if API fails
+    console.error("Climatiq API Error:", error.response?.data || error.message);
+    // fallback
     return calculateFallback(activityData);
   }
 }
 
-// Fallback calculation if API is unavailable
+// =========================
+// 🧮 Fallback Calculation (Offline)
+// =========================
 function calculateFallback(activityData) {
   const { activity_id, parameters } = activityData;
-  
-  // Basic emission factors (kg CO2e per unit)
-  const fallbackFactors = {
-    'car': 0.21, // kg CO2e per km
-    'bus': 0.089, // kg CO2e per km
-    'train': 0.041, // kg CO2e per km
-    'plane': 0.255, // kg CO2e per km
-    'motorcycle': 0.113, // kg CO2e per km
-    'electricity': 0.5, // kg CO2e per kWh (average grid)
-    'beef': 27, // kg CO2e per kg
-    'chicken': 6.9, // kg CO2e per kg
-    'pork': 12.1, // kg CO2e per kg
-    'fish': 3.0, // kg CO2e per kg
-    'dairy': 3.2, // kg CO2e per kg
-    'vegetables': 2.0, // kg CO2e per kg
-    'fruits': 1.1 // kg CO2e per kg
+
+  const fallback = {
+    car: 0.21,
+    bus: 0.089,
+    train: 0.041,
+    plane: 0.255,
+    motorcycle: 0.113,
+    electricity: 0.5,
+    beef: 27,
+    chicken: 6.9,
+    pork: 12.1,
+    fish: 3.0,
+    dairy: 3.2,
+    vegetables: 2.0,
+    fruits: 1.1,
   };
-  
+
   let co2e = 0;
-  
+
+  // distance
   if (parameters.distance) {
-    const vehicleType = activity_id.includes('car') ? 'car' :
-                       activity_id.includes('bus') ? 'bus' :
-                       activity_id.includes('train') ? 'train' :
-                       activity_id.includes('aircraft') ? 'plane' :
-                       activity_id.includes('motorcycle') ? 'motorcycle' : 'car';
-    co2e = parameters.distance * (fallbackFactors[vehicleType] || 0.21);
-  } else if (parameters.energy) {
-    co2e = parameters.energy * fallbackFactors['electricity'];
-  } else if (parameters.weight) {
-    const foodType = activity_id.includes('beef') ? 'beef' :
-                    activity_id.includes('chicken') ? 'chicken' :
-                    activity_id.includes('pork') ? 'pork' :
-                    activity_id.includes('fish') ? 'fish' :
-                    activity_id.includes('dairy') ? 'dairy' :
-                    activity_id.includes('vegetables') ? 'vegetables' :
-                    activity_id.includes('fruits') ? 'fruits' : 'vegetables';
-    co2e = parameters.weight * (fallbackFactors[foodType] || 2.0);
+    const type =
+      activity_id.includes("car") ? "car" :
+      activity_id.includes("bus") ? "bus" :
+      activity_id.includes("train") ? "train" :
+      activity_id.includes("aircraft") ? "plane" :
+      activity_id.includes("motorcycle") ? "motorcycle" : "car";
+
+    co2e = parameters.distance * (fallback[type] || 0.21);
   }
-  
+
+  // electricity
+  else if (parameters.energy) {
+    co2e = parameters.energy * fallback.electricity;
+  }
+
+  // food weight
+  else if (parameters.weight) {
+    const type =
+      activity_id.includes("beef") ? "beef" :
+      activity_id.includes("chicken") ? "chicken" :
+      activity_id.includes("pork") ? "pork" :
+      activity_id.includes("fish") ? "fish" :
+      activity_id.includes("dairy") ? "dairy" :
+      activity_id.includes("fruit") ? "fruits" : "vegetables";
+
+    co2e = parameters.weight * (fallback[type] || 2.0);
+  }
+
   return {
-    co2e: co2e,
-    co2e_unit: 'kg'
+    co2e,
+    co2e_unit: "kg",
   };
 }
 
-// Calculate commute emissions
-app.post('/api/calculate/commute', async (req, res) => {
+// =========================
+// 🚗 COMMUTE EMISSIONS
+// =========================
+app.post("/api/calculate/commute", async (req, res) => {
   try {
-    const { distance, vehicleType, unit = 'km' } = req.body;
-    
-    // Map vehicle types to Climatiq activity IDs
+    const { distance, vehicleType, unit = "km" } = req.body;
+
     const vehicleMap = {
-      'car': 'passenger_vehicle-vehicle_type_car-fuel_source_na-distance_na-engine_size_na',
-      'bus': 'passenger_vehicle-vehicle_type_bus-fuel_source_na-distance_na',
-      'train': 'passenger_vehicle-vehicle_type_train-fuel_source_na',
-      'plane': 'passenger_vehicle-vehicle_type_aircraft-fuel_source_na',
-      'motorcycle': 'passenger_vehicle-vehicle_type_motorcycle-fuel_source_na'
+      car: "passenger_vehicle-vehicle_type_car-fuel_source_na-distance_na-engine_size_na",
+      bus: "passenger_vehicle-vehicle_type_bus-fuel_source_na-distance_na",
+      train: "passenger_vehicle-vehicle_type_train-fuel_source_na",
+      plane: "passenger_vehicle-vehicle_type_aircraft-fuel_source_na",
+      motorcycle: "passenger_vehicle-vehicle_type_motorcycle-fuel_source_na",
     };
-    
-    const activityId = vehicleMap[vehicleType] || vehicleMap['car'];
-    
+
+    const activityId = vehicleMap[vehicleType] || vehicleMap.car;
+
     const emissionData = await calculateEmissions({
       activity_id: activityId,
       parameters: {
-        distance: distance,
-        distance_unit: unit
-      }
+        distance,
+        distance_unit: unit,
+      },
     });
-    
+
     res.json({
       success: true,
       co2e: emissionData.co2e,
-      co2e_unit: emissionData.co2e_unit,
-      activity: 'commute',
+      unit: emissionData.co2e_unit,
+      distance,
       vehicleType,
-      distance
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.response?.data || error.message
-    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Calculate electricity emissions
-app.post('/api/calculate/electricity', async (req, res) => {
+// =========================
+// ⚡ ELECTRICITY EMISSIONS
+// =========================
+app.post("/api/calculate/electricity", async (req, res) => {
   try {
-    const { energy, unit = 'kWh', country = 'US' } = req.body;
-    
-    // Use electricity grid emission factor
+    const { energy, unit = "kWh" } = req.body;
+
     const activityId = `electricity-energy_source_grid_mix-supplier_na-facility_na`;
-    
+
     const emissionData = await calculateEmissions({
       activity_id: activityId,
       parameters: {
-        energy: energy,
-        energy_unit: unit
-      }
+        energy,
+        energy_unit: unit,
+      },
     });
-    
+
     res.json({
       success: true,
       co2e: emissionData.co2e,
-      co2e_unit: emissionData.co2e_unit,
-      activity: 'electricity',
+      unit: emissionData.co2e_unit,
       energy,
-      unit
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.response?.data || error.message
-    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Calculate food emissions
-app.post('/api/calculate/food', async (req, res) => {
+// =========================
+// 🍎 FOOD EMISSIONS
+// =========================
+app.post("/api/calculate/food", async (req, res) => {
   try {
-    const { foodType, quantity, unit = 'kg' } = req.body;
-    
-    // Map food types to Climatiq activity IDs
+    const { foodType, quantity, unit = "kg" } = req.body;
+
     const foodMap = {
-      'beef': 'food-beef',
-      'chicken': 'food-chicken',
-      'pork': 'food-pork',
-      'fish': 'food-fish',
-      'dairy': 'food-dairy',
-      'vegetables': 'food-vegetables',
-      'fruits': 'food-fruits'
+      beef: "food-beef",
+      chicken: "food-chicken",
+      pork: "food-pork",
+      fish: "food-fish",
+      dairy: "food-dairy",
+      vegetables: "food-vegetables",
+      fruits: "food-fruits",
     };
-    
-    const activityId = foodMap[foodType] || 'food-vegetables';
-    
+
+    const activityId = foodMap[foodType] || foodMap.vegetables;
+
     const emissionData = await calculateEmissions({
       activity_id: activityId,
       parameters: {
         weight: quantity,
-        weight_unit: unit
-      }
+        weight_unit: unit,
+      },
     });
-    
+
     res.json({
       success: true,
       co2e: emissionData.co2e,
-      co2e_unit: emissionData.co2e_unit,
-      activity: 'food',
+      unit: emissionData.co2e_unit,
+      quantity,
       foodType,
-      quantity
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.response?.data || error.message
-    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Get offset suggestions from Gold Standard API
-app.get('/api/offsets', async (req, res) => {
+// =========================
+// 🌱 OFFSET PROJECTS
+// =========================
+app.get("/api/offsets", async (req, res) => {
   try {
-    // Gold Standard API endpoint for projects
-    const response = await axios.get(
-      `${GOLD_STANDARD_BASE_URL}/projects`,
-      {
-        params: {
-          limit: 10,
-          status: 'active'
-        }
-      }
-    );
-    
-    res.json({
-      success: true,
-      projects: response.data || []
+    const response = await axios.get(`${GOLD_STANDARD_BASE_URL}/projects`, {
+      params: { limit: 10, status: "active" },
     });
+
+    res.json({ success: true, projects: response.data });
   } catch (error) {
-    console.error('Gold Standard API Error:', error.response?.data || error.message);
-    // Return mock data if API fails
+    console.log("Gold Standard API Error (Fallback used).");
+
     res.json({
       success: true,
       projects: [
         {
           id: 1,
-          name: 'Renewable Energy Project',
-          description: 'Support clean energy initiatives',
-          co2e_per_dollar: 0.5,
-          location: 'Global'
+          name: "Renewable Energy Project",
+          description: "Support clean energy",
+          location: "Global",
         },
         {
           id: 2,
-          name: 'Reforestation Program',
-          description: 'Plant trees to offset carbon',
-          co2e_per_dollar: 0.3,
-          location: 'Global'
+          name: "Reforestation Program",
+          description: "Plant trees to offset carbon",
+          location: "Global",
         },
-        {
-          id: 3,
-          name: 'Clean Water Access',
-          description: 'Reduce emissions through clean water',
-          co2e_per_dollar: 0.4,
-          location: 'Global'
-        }
-      ]
+      ],
     });
   }
 });
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Carbon Calculator API is running' });
+// =========================
+// ❤️ HEALTH CHECK + ROOT
+// =========================
+app.get("/", (req, res) => {
+  res.send("Carbon Footprint API is running!");
 });
 
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", message: "API is operational" });
+});
+
+// =========================
+// 🚀 START SERVER
+// =========================
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Make sure to set CLIMATIQ_API_KEY in .env file`);
+  console.log(`🔥 Server live on port ${PORT}`);
+  console.log(`🔑 Using Climatiq API Key: ${CLIMATIQ_API_KEY ? "Loaded" : "Missing!"}`);
 });
-
