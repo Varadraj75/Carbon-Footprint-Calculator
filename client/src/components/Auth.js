@@ -4,7 +4,8 @@ import axios from 'axios';
 import ActivityForm from './ActivityForm';
 import './Auth.css';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+// 🔥 FIXED BASE URL
+const API_BASE_URL = `${process.env.REACT_APP_API_URL}/api`;
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -47,27 +48,23 @@ const Auth = () => {
     e.preventDefault();
     
     if (isLogin) {
-      // Login
       const users = JSON.parse(localStorage.getItem('users') || '[]');
       const user = users.find(u => u.email === formData.email && u.password === formData.password);
       
       if (user) {
         setCurrentUser(user);
         localStorage.setItem('currentUser', JSON.stringify(user));
-        // Check if user has activities
+        
         const saved = localStorage.getItem(`carbonActivities_${user.id}`);
         if (saved) {
-          // User has data, go to dashboard
           navigate('/dashboard');
         } else {
-          // No data, show activity form
           setShowActivityForm(true);
         }
       } else {
         setError('Invalid email or password');
       }
     } else {
-      // Signup
       if (!formData.name || !formData.email || !formData.password) {
         setError('All fields are required');
         return;
@@ -99,7 +96,6 @@ const Auth = () => {
     const newActivities = [];
 
     try {
-      // Process commute
       if (activityData.commute.distance) {
         const response = await axios.post(`${API_BASE_URL}/calculate/commute`, {
           distance: parseFloat(activityData.commute.distance),
@@ -117,7 +113,6 @@ const Auth = () => {
         }
       }
 
-      // Process electricity
       if (activityData.electricity.energy) {
         const response = await axios.post(`${API_BASE_URL}/calculate/electricity`, {
           energy: parseFloat(activityData.electricity.energy),
@@ -134,7 +129,6 @@ const Auth = () => {
         }
       }
 
-      // Process food
       if (activityData.food.quantity) {
         const response = await axios.post(`${API_BASE_URL}/calculate/food`, {
           foodType: activityData.food.foodType,
@@ -176,36 +170,19 @@ const Auth = () => {
           <div className="auth-card activity-card">
             <div className="auth-header">
               <h1>Welcome, {currentUser?.name}! 👋</h1>
-              <p>Let's track your carbon footprint. Fill in your daily activities below.</p>
+              <p>Let's track your carbon footprint.</p>
             </div>
 
             <div className="activity-forms-section">
-              <ActivityForm 
-                type="commute"
-                formData={activityData.commute}
-                onChange={handleActivityChange}
-              />
-              <ActivityForm 
-                type="electricity"
-                formData={activityData.electricity}
-                onChange={handleActivityChange}
-              />
-              <ActivityForm 
-                type="food"
-                formData={activityData.food}
-                onChange={handleActivityChange}
-              />
+              <ActivityForm type="commute" formData={activityData.commute} onChange={handleActivityChange} />
+              <ActivityForm type="electricity" formData={activityData.electricity} onChange={handleActivityChange} />
+              <ActivityForm type="food" formData={activityData.food} onChange={handleActivityChange} />
             </div>
 
             <div className="form-actions">
+              <button className="skip-btn" onClick={handleContinueToDashboard}>Skip for now</button>
               <button 
-                className="skip-btn" 
-                onClick={handleContinueToDashboard}
-              >
-                Skip for now
-              </button>
-              <button 
-                className="submit-all-btn" 
+                className="submit-all-btn"
                 onClick={handleSubmitAllActivities}
                 disabled={loading || (!activityData.commute.distance && !activityData.electricity.energy && !activityData.food.quantity)}
               >
@@ -238,6 +215,7 @@ const Auth = () => {
             >
               Login
             </button>
+
             <button 
               className={!isLogin ? 'active' : ''}
               onClick={() => {
@@ -254,39 +232,18 @@ const Auth = () => {
             {!isLogin && (
               <div className="form-group">
                 <label>Name</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  placeholder="Enter your name"
-                  required
-                />
+                <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="Enter your name" required />
               </div>
             )}
 
             <div className="form-group">
               <label>Email</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="Enter your email"
-                required
-              />
+              <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="Enter your email" required />
             </div>
 
             <div className="form-group">
               <label>Password</label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="Enter your password"
-                required
-              />
+              <input type="password" name="password" value={formData.password} onChange={handleChange} placeholder="Enter your password" required />
             </div>
 
             {error && <div className="error-message">{error}</div>}
