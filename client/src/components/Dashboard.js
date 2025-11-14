@@ -5,7 +5,8 @@ import ActivityForm from './ActivityForm';
 import DashboardCharts from './DashboardCharts';
 import './Dashboard.css';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+// 🔥 FIXED BASE URL
+const API_BASE_URL = `${process.env.REACT_APP_API_URL}/api`;
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -37,7 +38,6 @@ const Dashboard = () => {
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          // Ensure co2e is a number
           const normalized = parsed.map(activity => ({
             ...activity,
             co2e: parseFloat(activity.co2e) || 0
@@ -53,14 +53,16 @@ const Dashboard = () => {
 
   const calculateTotal = (activitiesList) => {
     const total = activitiesList.reduce((sum, activity) => {
-      const co2e = parseFloat(activity.co2e) || 0;
-      return sum + co2e;
+      return sum + (parseFloat(activity.co2e) || 0);
     }, 0);
     setTotalEmissions(total);
   };
 
   const handleActivityChange = (type, name, value) => {
-    setActivityData(prev => ({ ...prev, [type]: { ...prev[type], [name]: value } }));
+    setActivityData(prev => ({
+      ...prev,
+      [type]: { ...prev[type], [name]: value }
+    }));
   };
 
   const calculateEmissions = async (type, data) => {
@@ -70,14 +72,15 @@ const Dashboard = () => {
         electricity: { url: '/calculate/electricity', body: { energy: parseFloat(data.energy), unit: 'kWh' } },
         food: { url: '/calculate/food', body: { foodType: data.foodType, quantity: parseFloat(data.quantity), unit: 'kg' } }
       };
+
       const response = await axios.post(`${API_BASE_URL}${endpoints[type].url}`, endpoints[type].body);
+
       if (response.data.success) {
-        const co2e = parseFloat(response.data.co2e) || 0;
         return {
           id: Date.now() + Math.random(),
           type,
           date: new Date().toISOString().split('T')[0],
-          co2e: co2e,
+          co2e: parseFloat(response.data.co2e) || 0,
           co2e_unit: response.data.co2e_unit || 'kg',
           ...response.data,
           ...data
@@ -85,48 +88,52 @@ const Dashboard = () => {
       }
     } catch (error) {
       console.error(`Error calculating ${type} emissions:`, error);
-      // Use fallback calculation
+
+      // fallback local calc
       const fallbackFactors = {
         commute: { car: 0.21, bus: 0.089, train: 0.041, plane: 0.255, motorcycle: 0.113 },
         electricity: 0.5,
         food: { beef: 27, chicken: 6.9, pork: 12.1, fish: 3.0, dairy: 3.2, vegetables: 2.0, fruits: 1.1 }
       };
-      
+
       let co2e = 0;
       if (type === 'commute') {
-        const factor = fallbackFactors.commute[data.vehicleType] || 0.21;
-        co2e = parseFloat(data.distance) * factor;
+        co2e = parseFloat(data.distance) * (fallbackFactors.commute[data.vehicleType] || 0.21);
       } else if (type === 'electricity') {
         co2e = parseFloat(data.energy) * fallbackFactors.electricity;
       } else if (type === 'food') {
-        const factor = fallbackFactors.food[data.foodType] || 2.0;
-        co2e = parseFloat(data.quantity) * factor;
+        co2e = parseFloat(data.quantity) * (fallbackFactors.food[data.foodType] || 2.0);
       }
-      
+
       return {
         id: Date.now() + Math.random(),
         type,
         date: new Date().toISOString().split('T')[0],
-        co2e: co2e,
+        co2e,
         co2e_unit: 'kg',
         ...data
       };
     }
+
     return null;
   };
 
   const handleSubmitAllActivities = async () => {
     setLoading(true);
+
     try {
       const newActivities = [];
+
       if (activityData.commute.distance) {
         const result = await calculateEmissions('commute', activityData.commute);
         if (result) newActivities.push(result);
       }
+
       if (activityData.electricity.energy) {
         const result = await calculateEmissions('electricity', activityData.electricity);
         if (result) newActivities.push(result);
       }
+
       if (activityData.food.quantity) {
         const result = await calculateEmissions('food', activityData.food);
         if (result) newActivities.push(result);
@@ -137,7 +144,13 @@ const Dashboard = () => {
         setActivities(updatedActivities);
         calculateTotal(updatedActivities);
         localStorage.setItem(`carbonActivities_${currentUser.id}`, JSON.stringify(updatedActivities));
-        setActivityData({ commute: { vehicleType: 'car', distance: '' }, electricity: { energy: '' }, food: { foodType: 'vegetables', quantity: '' } });
+
+        setActivityData({
+          commute: { vehicleType: 'car', distance: '' },
+          electricity: { energy: '' },
+          food: { foodType: 'vegetables', quantity: '' }
+        });
+
         setActiveTab('dashboard');
       }
     } catch (error) {
@@ -149,7 +162,7 @@ const Dashboard = () => {
   };
 
   const handleResetData = () => {
-    if (window.confirm('Are you sure you want to reset all your data? This action cannot be undone.')) {
+    if (window.confirm('Are you sure you want to reset all data?')) {
       if (currentUser) {
         setActivities([]);
         setTotalEmissions(0);
@@ -161,10 +174,9 @@ const Dashboard = () => {
   const getDailyEmissions = () => {
     const daily = {};
     activities.forEach(activity => {
-      const date = activity.date;
       const co2e = parseFloat(activity.co2e) || 0;
       if (co2e > 0) {
-        daily[date] = (daily[date] || 0) + co2e;
+        daily[activity.date] = (daily[activity.date] || 0) + co2e;
       }
     });
     return daily;
@@ -175,16 +187,12 @@ const Dashboard = () => {
     activities.forEach(activity => {
       const co2e = parseFloat(activity.co2e) || 0;
       if (co2e > 0) {
-        try {
-          const date = new Date(activity.date + 'T00:00:00');
-          if (!isNaN(date.getTime())) {
-            const weekStart = new Date(date);
-            weekStart.setDate(date.getDate() - date.getDay());
-            const weekKey = weekStart.toISOString().split('T')[0];
-            weekly[weekKey] = (weekly[weekKey] || 0) + co2e;
-          }
-        } catch (e) {
-          console.error('Error processing date:', e);
+        const date = new Date(activity.date + 'T00:00:00');
+        if (!isNaN(date.getTime())) {
+          const weekStart = new Date(date);
+          weekStart.setDate(date.getDate() - date.getDay());
+          const weekKey = weekStart.toISOString().split('T')[0];
+          weekly[weekKey] = (weekly[weekKey] || 0) + co2e;
         }
       }
     });
@@ -212,7 +220,9 @@ const Dashboard = () => {
             <h1>CarbonVision Dashboard</h1>
             <p>Welcome back, {currentUser.name}!</p>
           </div>
-          <button className="logout-btn" onClick={() => { localStorage.removeItem('currentUser'); navigate('/'); }}>Logout</button>
+          <button className="logout-btn" onClick={() => { localStorage.removeItem('currentUser'); navigate('/'); }}>
+            Logout
+          </button>
         </div>
       </header>
 
