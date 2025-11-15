@@ -5,7 +5,7 @@ import ActivityForm from './ActivityForm';
 import './Auth.css';
 
 // 🔥 FIXED BASE URL
-const API_BASE_URL = `${process.env.REACT_APP_API_URL}`;
+const API_BASE_URL = "https://carbon-footprint-calculator-tf74.onrender.com/api/";
 
 const Auth = () => {
   const navigate = useNavigate();
