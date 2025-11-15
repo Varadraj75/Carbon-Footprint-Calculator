@@ -5,7 +5,7 @@ import ActivityForm from './ActivityForm';
 import './Auth.css';
 
 // 🔥 FIXED BASE URL
-const API_BASE_URL = "https://carbon-footprint-calculator-tf74.onrender.com/api/";
+const API_BASE_URL = "https://carbon-footprint-calculator-tf74.onrender.com";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -97,7 +97,7 @@ const Auth = () => {
 
     try {
       if (activityData.commute.distance) {
-        const response = await axios.post(`${API_BASE_URL}/calculate/commute`, {
+        const response = await axios.post(`${API_BASE_URL}/api/calculate/commute`, {
           distance: parseFloat(activityData.commute.distance),
           vehicleType: activityData.commute.vehicleType,
           unit: 'km'
@@ -114,7 +114,7 @@ const Auth = () => {
       }
 
       if (activityData.electricity.energy) {
-        const response = await axios.post(`${API_BASE_URL}/calculate/electricity`, {
+        const response = await axios.post(`${API_BASE_URL}/api/calculate/electricity`, {
           energy: parseFloat(activityData.electricity.energy),
           unit: 'kWh'
         });
@@ -130,7 +130,7 @@ const Auth = () => {
       }
 
       if (activityData.food.quantity) {
-        const response = await axios.post(`${API_BASE_URL}/calculate/food`, {
+        const response = await axios.post(`${API_BASE_URL}/api/calculate/food`, {
           foodType: activityData.food.foodType,
           quantity: parseFloat(activityData.food.quantity),
           unit: 'kg'
